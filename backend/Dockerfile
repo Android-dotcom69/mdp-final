@@ -1,23 +1,18 @@
 FROM python:3.11-slim
 
-# Limit parallel compilation to reduce memory usage (dlib is memory-hungry)
-ENV CMAKE_BUILD_PARALLEL_LEVEL=1
-ENV MAKEFLAGS="-j1"
-
-# Install only essential system deps (removed libboost-all-dev — not needed for dlib Python bindings, was using ~4GB)
+# Only runtime dependencies - NO build tools needed (using pre-built wheels)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
     libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
 COPY requirements.txt .
 
-# Install dlib first (most memory-intensive step) then the rest
-RUN pip install --no-cache-dir dlib
+# Install dlib from pre-built wheel (no compilation, no memory issues)
+RUN pip install --no-cache-dir dlib --only-binary=dlib
+
+# Install remaining dependencies (all have pre-built wheels)
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
