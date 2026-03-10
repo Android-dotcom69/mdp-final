@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Face Recognition Dashboard</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+        :root {
+            --background: #0f172a;
+            --surface: #1e293b;
+            --primary: #6366f1;
+            --secondary: #ec4899;
+            --text: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+            --success: #22c55e;
+            --error: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background-color: var(--surface);
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        #status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--error);
+        }
+
+        .status-dot.connected {
+            background-color: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+            padding: 2rem;
+        }
+
+        .card {
+            background-color: var(--surface);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .streaming-card {
+            flex: 2;
+            min-width: 640px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .controls-card {
+            flex: 1;
+            min-width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .video-container {
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 16/9;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid var(--border);
+            position: relative;
+        }
+
+        img#video-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            background-color: #4f46e5;
+        }
+
+        .btn-secondary {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--border);
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"] {
+            background-color: var(--background);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.75rem;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary);
+        }
+
+        .log-area {
+            background-color: var(--background);
+            border-radius: 8px;
+            padding: 1rem;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .log-entry {
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+            word-break: break-all;
+        }
+
+        .detected-face {
+            color: var(--success);
+            font-weight: bold;
+        }
+
+        .unknown-face {
+            color: var(--error);
+        }
+
+        /* Loader */
+        .loader {
+            border: 4px solid var(--border);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Face Recognition Service</h1>
+        <div id="status">
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">Disconnected</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Video Feed Section -->
+        <div class="card streaming-card">
+            <h2>Live Feed</h2>
+            <div class="video-container">
+                <img id="video-feed" src="/api/v1/webcam/feed" alt="Webcam Feed"
+                    onerror="this.src='https://via.placeholder.com/640x480?text=Webcam+Offline'" />
+            </div>
+            <div style="margin-top: 1rem; display: flex; gap: 1rem; width: 100%;">
+                <button class="btn" onclick="captureAndDetect()">Analyze Current Frame</button>
+            </div>
+        </div>
+
+        <!-- Controls & Logs Section -->
+        <div class="card controls-card">
+            <h2>Register New Face</h2>
+            <div class="input-group">
+                <label for="person-name">Name</label>
+                <input type="text" id="person-name" placeholder="Enter name e.g., Alice" />
+            </div>
+            <button class="btn btn-secondary" onclick="registerFace()">Register Current View</button>
+            <div id="register-status"></div>
+
+            <h2 style="margin-top: 1rem;">Process Logs</h2>
+            <div class="log-area" id="logs">
+                <div class="log-entry">System initializing...</div>
+            </div>
+            <div class="loader" id="loader"></div>
+        </div>
+    </main>
+
+    <script>
+        const API_BASE = '/api/v1';
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span style="color: #64748b">[${timestamp}]</span> ${message}`;
+
+            logs.prepend(entry);
+        }
+
+        function updateStatus(connected) {
+            const text = document.getElementById('status-text');
+            const dot = document.getElementById('status-dot');
+
+            if (connected) {
+                text.textContent = 'System Online';
+                text.style.color = 'var(--text)';
+                dot.classList.add('connected');
+            } else {
+                text.textContent = 'Disconnected';
+                text.style.color = 'var(--text-secondary)';
+                dot.classList.remove('connected');
+            }
+        }
+
+        async function checkHealth() {
+            try {
+                const res = await fetch('/');
+                if (res.ok) {
+                    updateStatus(true);
+                } else {
+                    updateStatus(false);
+                }
+            } catch (e) {
+                updateStatus(false);
+            }
+        }
+
+        // Check health immediately and every 5 seconds
+        checkHealth();
+        setInterval(checkHealth, 5000);
+
+        async function captureAndDetect() {
+            const loader = document.getElementById('loader');
+            loader.style.display = 'block';
+
+            try {
+                const response = await fetch(`${API_BASE}/webcam/process_current_frame`, {
+                    method: 'POST'
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    log(`Server Error: ${response.status} - ${errText}`, 'error');
+                    return;
+                }
+
+                const result = await response.json();
+
+                if (result.faces && result.faces.length > 0) {
+                    result.faces.forEach(face => {
+                        const confidence = (face.confidence * 100).toFixed(1);
+                        const label = face.name === 'Unknown'
+                            ? `<span class="unknown-face">Unknown (${confidence}%)</span>`
+                            : `<span class="detected-face">${face.name} (${confidence}%)</span>`;
+
+                        log(`Detected: ${label}`);
+
+                        if (face.debug && Object.keys(face.debug).length > 0) {
+                            let debugMsg = "Distances: ";
+                            for (const [name, dist] of Object.entries(face.debug)) {
+                                debugMsg += `${name}: ${dist.toFixed(3)}, `;
+                            }
+                            log(debugMsg);
+                        }
+                    });
+                } else {
+                    log('No faces detected in current frame.');
+                    if (result.faces.length === 0) {
+                        // Even if no faces found, check if we have any registered faces
+                        // We can't easily check registered count from this endpoint response structure 
+                        // without changing backend, but we can infer if user is just staring at blank wall.
+                    }
+                }
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        async function registerFace() {
+            const nameInput = document.getElementById('person-name');
+            const name = nameInput.value.trim();
+
+            if (!name) {
+                alert('Please enter a name first.');
+                return;
+            }
+
+            const loader = document.getElementById('loader');
+            loader.style.display = 'block';
+
+            try {
+                // 1. Snapshot the current frame
+                const snapshotRes = await fetch(`${API_BASE}/webcam/snapshot`);
+                if (!snapshotRes.ok) throw new Error('Failed to capture snapshot');
+                const blob = await snapshotRes.blob();
+
+                // 2. Upload to register endpoint
+                const formData = new FormData();
+                formData.append('file', blob, 'capture.jpg');
+                formData.append('name', name);
+
+                const registerRes = await fetch(`${API_BASE}/faces/register`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!registerRes.ok) {
+                    const err = await registerRes.json();
+                    throw new Error(err.detail || 'Registration failed');
+                }
+
+                const data = await registerRes.json();
+                log(`Success! Registered <span class="detected-face">${data.name}</span> (ID: ${data.id})`);
+                nameInput.value = '';
+
+                log('Cache updated. Try analyzing again now.');
+
+            } catch (error) {
+                log(`Registration Error: ${error.message}`, 'error');
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+
+</html>

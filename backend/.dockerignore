@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+.git
+.env
+.venv
+venv
+tests
+docker-compose.yml
+cleanup.bat
+run_app.bat
+README.md
+setup.log
+cleanup.log
+*.msi
