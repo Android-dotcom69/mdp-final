@@ -2,7 +2,6 @@ databases:
   - name: face-recognition-db
     plan: free
     databaseName: face_db
-    user: postgres
 
 services:
   - type: web
