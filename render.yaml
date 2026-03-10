@@ -1,0 +1,20 @@
+databases:
+  - name: face-recognition-db
+    plan: free
+    databaseName: face_db
+    user: postgres
+
+services:
+  - type: web
+    name: face-recognition-api
+    plan: free
+    rootDir: backend
+    runtime: docker
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: face-recognition-db
+          property: connectionString
+      - key: FRONTEND_URL
+        value: https://mdp-final.vercel.app
