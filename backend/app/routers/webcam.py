@@ -71,9 +71,10 @@ async def process_frame(file: UploadFile = File(...)):
 
             # Confidence calculation: 1.0 is perfect match (dist=0), 0.0 is terrible (dist=1.0)
             # Threshold 0.6
-            if min_dist < 0.6:
+            # SFace uses L2-normalized embeddings: same person ~0.3-1.0, different ~1.0-1.8
+            if min_dist < 1.0:
                 name = known_names[min_idx]
-                confidence = max(0, 1 - min_dist)
+                confidence = max(0, 1 - min_dist / 1.5)
             else:
                 pass
 
