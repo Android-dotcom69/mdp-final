@@ -9,5 +9,4 @@ opencv-python-headless==4.9.0.80
 numpy==1.26.3
 greenlet==3.0.3
 aiofiles==23.2.1
-mediapipe
 python-multipart
