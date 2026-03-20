@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import FaceRegistration from '../components/FaceRegistration';
 import api from '../services/api';
-import { UserPlus, Bell, Shield, Trash2, Users, Database } from 'lucide-react';
+import { UserPlus, Bell, Shield, Trash2, Users, Database, Camera, Wifi } from 'lucide-react';
 
 const ToggleSwitch = ({ label, enabled, setEnabled }) => (
   <div className="flex items-center justify-between">
@@ -50,6 +50,9 @@ const SettingsPage = () => {
   const [showRegistration, setShowRegistration] = useState(false);
   const [registeredUsers, setRegisteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cameraSource, setCameraSource] = useState('browser');
+  const [cameraUrl, setCameraUrl] = useState('');
+  const [cameraTestStatus, setCameraTestStatus] = useState('');
   const [settings, setSettings] = useState({
     notifications: {
       unauthorized: true,
@@ -65,6 +68,10 @@ const SettingsPage = () => {
   useEffect(() => {
     loadRegisteredUsers();
     loadSettings();
+    const storedSource = localStorage.getItem('cameraSource') || 'browser';
+    const storedUrl = localStorage.getItem('cameraUrl') || '';
+    setCameraSource(storedSource);
+    setCameraUrl(storedUrl);
   }, []);
 
   const loadRegisteredUsers = async () => {
@@ -98,6 +105,31 @@ const SettingsPage = () => {
     } catch (error) {
       console.error('Error saving settings:', error);
     }
+  };
+
+  const handleCameraSourceChange = (source) => {
+    setCameraSource(source);
+    localStorage.setItem('cameraSource', source);
+  };
+
+  const handleCameraUrlChange = (url) => {
+    setCameraUrl(url);
+    localStorage.setItem('cameraUrl', url);
+  };
+
+  const testCameraUrl = () => {
+    if (!cameraUrl.trim()) {
+      setCameraTestStatus('error');
+      return;
+    }
+    setCameraTestStatus('testing');
+    const img = new Image();
+    img.onload = () => setCameraTestStatus('success');
+    img.onerror = () => setCameraTestStatus('error');
+    img.src = cameraUrl;
+    setTimeout(() => {
+      setCameraTestStatus((prev) => prev === 'testing' ? 'error' : prev);
+    }, 5000);
   };
 
   const handleNotificationChange = (key) => {
@@ -148,7 +180,6 @@ const SettingsPage = () => {
         settings: settings,
         exportDate: new Date().toISOString()
       };
-
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -216,6 +247,86 @@ const SettingsPage = () => {
               <p className="text-sm text-gray-500 mt-2">Click "Register New Face" to add your first user</p>
             </div>
           )}
+        </div>
+
+        {/* Camera Source Settings */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-black mb-4 transition-colors hover:text-blue-600 dark:hover:text-blue-400 flex items-center">
+            <Camera className="mr-2" />
+            Camera Source
+          </h2>
+          <div className="space-y-4">
+            <div className="flex items-center space-x-6">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="cameraSource"
+                  value="browser"
+                  checked={cameraSource === 'browser'}
+                  onChange={() => handleCameraSourceChange('browser')}
+                  className="mr-2 text-blue-600"
+                />
+                <Camera size={18} className="mr-1 text-gray-600" />
+                <span className="text-gray-700">Browser Webcam</span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="cameraSource"
+                  value="ip"
+                  checked={cameraSource === 'ip'}
+                  onChange={() => handleCameraSourceChange('ip')}
+                  className="mr-2 text-blue-600"
+                />
+                <Wifi size={18} className="mr-1 text-gray-600" />
+                <span className="text-gray-700">IP Camera / Raspberry Pi</span>
+              </label>
+            </div>
+
+            {cameraSource === 'ip' && (
+              <div className="border-t pt-4 space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Camera Stream URL
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={cameraUrl}
+                      onChange={(e) => handleCameraUrlChange(e.target.value)}
+                      placeholder="http://192.168.1.100:8080/?action=stream"
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-black placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      onClick={testCameraUrl}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Test
+                    </button>
+                  </div>
+                </div>
+                {cameraTestStatus === 'testing' && (
+                  <p className="text-sm text-blue-600">Testing connection...</p>
+                )}
+                {cameraTestStatus === 'success' && (
+                  <p className="text-sm text-green-600">Camera stream is reachable!</p>
+                )}
+                {cameraTestStatus === 'error' && (
+                  <p className="text-sm text-red-600">Could not reach camera. Check the URL and ensure the device is on the same network.</p>
+                )}
+                <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded">
+                  <p className="text-sm text-blue-800 font-medium">Supported stream URLs:</p>
+                  <ul className="text-xs text-blue-700 mt-1 space-y-1 list-disc list-inside">
+                    <li>Raspberry Pi (mjpg-streamer): http://pi-ip:8080/?action=stream</li>
+                    <li>Raspberry Pi (picamera2 + Flask): http://pi-ip:5000/video_feed</li>
+                    <li>IP Webcam (Android): http://phone-ip:8080/video</li>
+                    <li>DroidCam: http://phone-ip:4747/video</li>
+                    <li>Any MJPEG stream URL</li>
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Notification Settings Section */}
@@ -327,11 +438,11 @@ const SettingsPage = () => {
             </div>
             <div>
               <p className="text-gray-600">ML Backend</p>
-              <p className="text-2xl font-bold text-gray-800">dlib + MediaPipe</p>
+              <p className="text-2xl font-bold text-gray-800">SFace + MediaPipe</p>
             </div>
             <div>
-              <p className="text-gray-600">Version</p>
-              <p className="text-2xl font-bold text-gray-800">2.0.0</p>
+              <p className="text-gray-600">Camera Source</p>
+              <p className="text-2xl font-bold text-gray-800">{cameraSource === 'ip' ? 'IP Camera' : 'Browser'}</p>
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-// src/components/FaceRegistration.js - Backend API version
+// src/components/FaceRegistration.js - Backend API version with IP camera support
 import React, { useState, useRef, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Camera, UserPlus, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
@@ -7,11 +7,23 @@ import api, { dataURLtoBlob } from '../services/api';
 const FaceRegistration = ({ onRegistrationComplete, onClose }) => {
   const [name, setName] = useState('');
   const [role, setRole] = useState('Employee');
-  const [status, setStatus] = useState('loading'); // loading, idle, capturing, processing, success, error
+  const [status, setStatus] = useState('loading');
   const [message, setMessage] = useState('Connecting to face recognition server...');
   const [capturedImages, setCapturedImages] = useState([]);
   const webcamRef = useRef(null);
+  const imgRef = useRef(null);
+  const hiddenCanvasRef = useRef(null);
   const [serviceReady, setServiceReady] = useState(false);
+  const [cameraSource, setCameraSource] = useState('browser');
+  const [cameraUrl, setCameraUrl] = useState('');
+
+  // Load camera settings
+  useEffect(() => {
+    const source = localStorage.getItem('cameraSource') || 'browser';
+    const url = localStorage.getItem('cameraUrl') || '';
+    setCameraSource(source);
+    setCameraUrl(url);
+  }, []);
 
   // Check backend health on mount
   useEffect(() => {
@@ -36,7 +48,7 @@ const FaceRegistration = ({ onRegistrationComplete, onClose }) => {
   }, []);
 
   const captureImage = async () => {
-    if (!webcamRef.current || !serviceReady) {
+    if (!serviceReady) {
       setMessage('Please wait for the server connection');
       return;
     }
@@ -45,12 +57,32 @@ const FaceRegistration = ({ onRegistrationComplete, onClose }) => {
       setStatus('capturing');
       setMessage('Capturing and validating...');
 
-      const imageSrc = webcamRef.current.getScreenshot();
+      let imageSrc = null;
+
+      if (cameraSource === 'ip' && cameraUrl) {
+        // IP Camera: capture from <img> via hidden canvas
+        const img = imgRef.current;
+        if (!img || !img.naturalWidth) {
+          throw new Error('IP camera stream not loaded');
+        }
+        const hCanvas = hiddenCanvasRef.current;
+        hCanvas.width = img.naturalWidth || 640;
+        hCanvas.height = img.naturalHeight || 480;
+        const hCtx = hCanvas.getContext('2d');
+        hCtx.drawImage(img, 0, 0);
+        imageSrc = hCanvas.toDataURL('image/jpeg', 0.8);
+      } else {
+        // Browser webcam
+        if (!webcamRef.current) {
+          throw new Error('Webcam not available');
+        }
+        imageSrc = webcamRef.current.getScreenshot();
+      }
+
       if (!imageSrc) {
         throw new Error('Failed to capture image');
       }
 
-      // Convert to blob and validate with backend (detect endpoint checks for faces)
       const blob = dataURLtoBlob(imageSrc);
       const detections = await api.detectFaces(blob);
 
@@ -68,7 +100,6 @@ const FaceRegistration = ({ onRegistrationComplete, onClose }) => {
         return;
       }
 
-      // Store the captured image (keep the data URL for preview)
       setCapturedImages(prev => [...prev, { src: imageSrc }]);
 
       setMessage(`Captured ${capturedImages.length + 1}/3 images successfully!`);
@@ -107,8 +138,6 @@ const FaceRegistration = ({ onRegistrationComplete, onClose }) => {
       setStatus('processing');
       setMessage('Registering face with server...');
 
-      // Send the first captured image to the backend for registration
-      // The backend handles face detection + embedding extraction + DB storage
       const blob = dataURLtoBlob(capturedImages[0].src);
       const result = await api.registerFace(name.trim(), blob);
 
@@ -156,7 +185,6 @@ const FaceRegistration = ({ onRegistrationComplete, onClose }) => {
     facingMode: 'user',
   };
 
-  // Show loading state
   if (status === 'loading') {
     return (
       <div className="bg-white rounded-lg shadow-xl p-6 max-w-4xl mx-auto">
@@ -181,21 +209,35 @@ const FaceRegistration = ({ onRegistrationComplete, onClose }) => {
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left: Webcam */}
+        {/* Left: Camera */}
         <div>
           <div className="mb-4">
-            <Webcam
-              ref={webcamRef}
-              audio={false}
-              screenshotFormat="image/jpeg"
-              videoConstraints={videoConstraints}
-              className="w-full rounded-lg border-2 border-gray-300"
-              onUserMediaError={(err) => {
-                console.error('Webcam error:', err);
-                setStatus('error');
-                setMessage('Failed to access webcam. Please check permissions and try again.');
-              }}
-            />
+            {cameraSource === 'ip' && cameraUrl ? (
+              <>
+                <img
+                  ref={imgRef}
+                  src={cameraUrl}
+                  crossOrigin="anonymous"
+                  alt="IP Camera Stream"
+                  className="w-full rounded-lg border-2 border-gray-300"
+                  onError={() => setMessage('Cannot load IP camera stream. Check Settings.')}
+                />
+                <canvas ref={hiddenCanvasRef} style={{ display: 'none' }} />
+              </>
+            ) : (
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                screenshotFormat="image/jpeg"
+                videoConstraints={videoConstraints}
+                className="w-full rounded-lg border-2 border-gray-300"
+                onUserMediaError={(err) => {
+                  console.error('Webcam error:', err);
+                  setStatus('error');
+                  setMessage('Failed to access webcam. Please check permissions and try again.');
+                }}
+              />
+            )}
           </div>
 
           <button
@@ -280,6 +322,9 @@ const FaceRegistration = ({ onRegistrationComplete, onClose }) => {
                 <li>Ensure good lighting</li>
                 <li>Capture 1-3 images from different angles</li>
                 <li>Keep your face clearly visible</li>
+                {cameraSource === 'ip' && (
+                  <li>Using IP Camera — configure stream URL in Settings</li>
+                )}
               </ul>
             </div>
 
