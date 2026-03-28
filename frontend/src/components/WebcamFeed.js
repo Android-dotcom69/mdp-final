@@ -17,6 +17,7 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
   const [cameraSource, setCameraSource] = useState('browser');
   const [cameraUrl, setCameraUrl] = useState('');
   const [ipStreamError, setIpStreamError] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
 
   const detectionIntervalRef = useRef(null);
   const fpsIntervalRef = useRef(null);
@@ -65,7 +66,6 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
   // For IP camera, mark video ready once stream loads
   useEffect(() => {
     if (cameraSource === 'ip' && cameraUrl) {
-      // IP camera is "ready" immediately (stream loads in img tag)
       setIsVideoReady(true);
     }
   }, [cameraSource, cameraUrl]);
@@ -117,7 +117,6 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
       let blob = null;
 
       if (cameraSource === 'ip' && cameraUrl) {
-        // IP Camera: capture frame from <img> via hidden canvas
         const img = imgRef.current;
         if (!img || !img.naturalWidth) {
           isProcessingRef.current = false;
@@ -131,7 +130,6 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
         hCtx.drawImage(img, 0, 0);
         blob = await new Promise((resolve) => hCanvas.toBlob(resolve, 'image/jpeg', 0.8));
       } else {
-        // Browser webcam: capture via react-webcam
         if (!webcamRef.current) { isProcessingRef.current = false; return; }
         const video = webcamRef.current.video;
         if (!video || video.readyState !== 4) { isProcessingRef.current = false; return; }
@@ -149,7 +147,7 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      // Sync canvas size
+      // Sync canvas size to source dimensions
       let sourceWidth, sourceHeight;
       if (cameraSource === 'ip' && cameraUrl) {
         const img = imgRef.current;
@@ -175,6 +173,9 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           const [top, right, bottom, left] = face.location;
           const isKnown = face.name !== 'Unknown';
 
+          // Debug: log coordinates to console
+          console.log(`[FaceDebug] name=${face.name} conf=${face.confidence.toFixed(3)} loc=[top=${top},right=${right},bottom=${bottom},left=${left}] canvas=${canvas.width}x${canvas.height}`);
+
           ctx.strokeStyle = isKnown ? '#22c55e' : '#ef4444';
           ctx.lineWidth = 3;
           ctx.strokeRect(left, top, right - left, bottom - top);
@@ -189,6 +190,10 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           ctx.fillText(label, left + 6, top - 7);
         });
 
+        // Update debug overlay text
+        const f = response.faces[0];
+        setDebugInfo(`bbox: [${f.location.join(',')}] canvas: ${canvas.width}x${canvas.height}`);
+
         const mappedFaces = response.faces.map(face => ({
           name: face.name,
           confidence: Math.round(face.confidence * 100),
@@ -201,6 +206,8 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
         }
 
         frameCountRef.current++;
+      } else {
+        setDebugInfo('No faces detected');
       }
     } catch (err) {
       if (err.message && !err.message.includes('Failed to fetch')) {
@@ -270,7 +277,6 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           ref={canvasRef}
           className="absolute top-0 left-0 w-full h-full pointer-events-none"
         />
-        {/* Hidden canvas for frame capture */}
         <canvas ref={hiddenCanvasRef} style={{ display: 'none' }} />
 
         {ipStreamError && (
@@ -295,7 +301,6 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           </div>
         )}
 
-        {/* Status overlay */}
         <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded-lg flex items-center space-x-2">
           <div className={`w-2 h-2 rounded-full ${
             isActive && !isLoading && backendConnected && !ipStreamError
@@ -307,10 +312,15 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           </span>
         </div>
 
-        {/* FPS counter */}
         {!isLoading && backendConnected && !ipStreamError && (
           <div className="absolute top-4 right-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded-lg">
             <span className="text-sm font-medium">{fps} FPS</span>
+          </div>
+        )}
+
+        {debugInfo && (
+          <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 text-yellow-300 px-3 py-1 rounded text-xs font-mono">
+            {debugInfo}
           </div>
         )}
       </div>
@@ -352,7 +362,6 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
         </div>
       )}
 
-      {/* Status overlay */}
       <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded-lg flex items-center space-x-2">
         <div className={`w-2 h-2 rounded-full ${
           isActive && !isLoading && isVideoReady && backendConnected
@@ -364,10 +373,15 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
         </span>
       </div>
 
-      {/* FPS counter */}
       {!isLoading && isVideoReady && backendConnected && (
         <div className="absolute top-4 right-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded-lg">
           <span className="text-sm font-medium">{fps} FPS</span>
+        </div>
+      )}
+
+      {debugInfo && (
+        <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 text-yellow-300 px-3 py-1 rounded text-xs font-mono">
+          {debugInfo}
         </div>
       )}
     </div>

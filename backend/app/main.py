@@ -3,15 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import faces, webcam
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.models.face import Face  # Import models so metadata is known
+from app.models.face import Face
 from app.routers.webcam import load_known_faces
+import os
 
 app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
-# CORS - allow the React frontend to call this API
 origins = [
-    "http://localhost:3000",       # local React dev
-    settings.FRONTEND_URL,         # production Vercel URL (set via env var)
+    "http://localhost:3000",
+    settings.FRONTEND_URL,
 ]
 
 app.add_middleware(
@@ -24,11 +24,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_db_client():
-    # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    # Load known faces cache
     try:
         await load_known_faces()
     except Exception as e:
@@ -48,3 +45,21 @@ def read_root():
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+@app.get("/debug/info")
+async def debug_info():
+    """Debug endpoint to verify which models and code version are deployed."""
+    import cv2
+    from app.services.face_logic import face_logic
+    return {
+        "detection_model": "YuNet (face_detection_yunet_2023mar.onnx)",
+        "recognition_model": "SFace (face_recognition_sface_2021dec.onnx)",
+        "matching_method": "cosine_similarity",
+        "matching_threshold": 0.35,
+        "opencv_version": cv2.__version__,
+        "yunet_model_exists": os.path.exists(face_logic.yunet_model_path),
+        "sface_model_exists": os.path.exists(face_logic.sface_model_path),
+        "cached_faces_count": len(webcam.known_faces_cache["encodings"]),
+        "cached_face_names": webcam.known_faces_cache["names"],
+        "code_version": "v2.1-yunet-sface-cosine",
+    }
