@@ -173,21 +173,24 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           const [top, right, bottom, left] = face.location;
           const isKnown = face.name !== 'Unknown';
 
-          // Debug: log coordinates to console
-          console.log(`[FaceDebug] name=${face.name} conf=${face.confidence.toFixed(3)} loc=[top=${top},right=${right},bottom=${bottom},left=${left}] canvas=${canvas.width}x${canvas.height}`);
+          // Mirror x-coordinates to match the mirrored webcam display
+          const mirroredLeft = canvas.width - right;
+          const mirroredRight = canvas.width - left;
+
+          console.log(`[FaceDebug] name=${face.name} conf=${face.confidence.toFixed(3)} raw=[${top},${right},${bottom},${left}] mirrored=[${mirroredLeft},${mirroredRight}] canvas=${canvas.width}x${canvas.height}`);
 
           ctx.strokeStyle = isKnown ? '#22c55e' : '#ef4444';
           ctx.lineWidth = 3;
-          ctx.strokeRect(left, top, right - left, bottom - top);
+          ctx.strokeRect(mirroredLeft, top, mirroredRight - mirroredLeft, bottom - top);
 
           const label = `${face.name} (${Math.round(face.confidence * 100)}%)`;
           ctx.font = 'bold 14px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;
           ctx.fillStyle = isKnown ? '#22c55e' : '#ef4444';
-          ctx.fillRect(left, top - 24, textWidth + 12, 24);
+          ctx.fillRect(mirroredLeft, top - 24, textWidth + 12, 24);
 
           ctx.fillStyle = '#ffffff';
-          ctx.fillText(label, left + 6, top - 7);
+          ctx.fillText(label, mirroredLeft + 6, top - 7);
         });
 
         // Update debug overlay text
@@ -347,7 +350,6 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
       <canvas
         ref={canvasRef}
         className="absolute top-0 left-0 w-full h-full pointer-events-none"
-        style={{ transform: 'scaleX(-1)' }}
       />
 
       {isLoading && (
