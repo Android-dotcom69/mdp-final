@@ -333,6 +333,7 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
       <Webcam
         ref={webcamRef}
         audio={false}
+        mirrored={true}
         screenshotFormat="image/jpeg"
         screenshotQuality={0.7}
         videoConstraints={videoConstraints}
@@ -346,6 +347,7 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
       <canvas
         ref={canvasRef}
         className="absolute top-0 left-0 w-full h-full pointer-events-none"
+        style={{ transform: 'scaleX(-1)' }}
       />
 
       {isLoading && (

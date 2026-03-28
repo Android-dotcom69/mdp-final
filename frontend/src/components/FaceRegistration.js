@@ -228,6 +228,7 @@ const FaceRegistration = ({ onRegistrationComplete, onClose }) => {
               <Webcam
                 ref={webcamRef}
                 audio={false}
+                mirrored={true}
                 screenshotFormat="image/jpeg"
                 videoConstraints={videoConstraints}
                 className="w-full rounded-lg border-2 border-gray-300"
