@@ -76,6 +76,8 @@ async def process_frame(file: UploadFile = File(...)):
             "name": name,
             "confidence": float(confidence),
             "location": face_data["location"],
+            "debug_scores": {known_names[i]: round(s, 4) for i, s in enumerate(cosine_scores)} if known_encodings else {},
+            "debug_embedding_norm": round(unk_norm, 4),
         })
 
     return {"faces": response_data}

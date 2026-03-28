@@ -177,7 +177,7 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           const mirroredLeft = canvas.width - right;
           const mirroredRight = canvas.width - left;
 
-          console.log(`[FaceDebug] name=${face.name} conf=${face.confidence.toFixed(3)} raw=[${top},${right},${bottom},${left}] mirrored=[${mirroredLeft},${mirroredRight}] canvas=${canvas.width}x${canvas.height}`);
+          console.log(`[FaceDebug] name=${face.name} conf=${face.confidence.toFixed(3)} scores=${JSON.stringify(face.debug_scores)} norm=${face.debug_embedding_norm} raw=[${top},${right},${bottom},${left}]`);
 
           ctx.strokeStyle = isKnown ? '#22c55e' : '#ef4444';
           ctx.lineWidth = 3;
@@ -195,7 +195,8 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
 
         // Update debug overlay text
         const f = response.faces[0];
-        setDebugInfo(`bbox: [${f.location.join(',')}] canvas: ${canvas.width}x${canvas.height}`);
+        const scoresStr = f.debug_scores ? Object.entries(f.debug_scores).map(([k,v]) => `${k}=${v}`).join(' ') : 'no known faces';
+        setDebugInfo(`scores: [${scoresStr}] norm=${f.debug_embedding_norm || '?'}`);
 
         const mappedFaces = response.faces.map(face => ({
           name: face.name,
