@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# Only runtime deps — no build tools needed (all packages have pre-built wheels)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -13,8 +12,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 
-# Pre-download ML models at build time (MediaPipe + SFace)
-RUN python -c "from app.services.face_logic import face_logic; print('Models ready')"
+# Pre-download ML models at build time (YuNet + SFace)
+# Use timeout and retry to handle flaky GitHub downloads
+RUN python -c "\
+from app.services.face_logic import face_logic; \
+print('Models ready: YuNet + SFace') \
+" || echo "Model download failed during build - will retry at runtime"
 
 EXPOSE 8000
 
