@@ -173,24 +173,22 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           const [top, right, bottom, left] = face.location;
           const isKnown = face.name !== 'Unknown';
 
-          // Mirror x-coordinates to match the mirrored webcam display
-          const mirroredLeft = canvas.width - right;
-          const mirroredRight = canvas.width - left;
-
-          console.log(`[FaceDebug] name=${face.name} conf=${face.confidence.toFixed(3)} scores=${JSON.stringify(face.debug_scores)} norm=${face.debug_embedding_norm} raw=[${top},${right},${bottom},${left}]`);
+          // No coordinate mirroring needed — mirrored={true} on Webcam
+          // already mirrors the screenshot, so backend coords match the display
+          console.log(`[FaceDebug] name=${face.name} conf=${face.confidence.toFixed(3)} scores=${JSON.stringify(face.debug_scores)} norm=${face.debug_embedding_norm} loc=[${top},${right},${bottom},${left}] canvas=${canvas.width}x${canvas.height}`);
 
           ctx.strokeStyle = isKnown ? '#22c55e' : '#ef4444';
           ctx.lineWidth = 3;
-          ctx.strokeRect(mirroredLeft, top, mirroredRight - mirroredLeft, bottom - top);
+          ctx.strokeRect(left, top, right - left, bottom - top);
 
           const label = `${face.name} (${Math.round(face.confidence * 100)}%)`;
           ctx.font = 'bold 14px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;
           ctx.fillStyle = isKnown ? '#22c55e' : '#ef4444';
-          ctx.fillRect(mirroredLeft, top - 24, textWidth + 12, 24);
+          ctx.fillRect(left, top - 24, textWidth + 12, 24);
 
           ctx.fillStyle = '#ffffff';
-          ctx.fillText(label, mirroredLeft + 6, top - 7);
+          ctx.fillText(label, left + 6, top - 7);
         });
 
         // Update debug overlay text
