@@ -8,6 +8,7 @@ app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
 
 origins = [
     "http://localhost:3000",
+    "https://mdp-final.vercel.app",
     settings.FRONTEND_URL,
 ]
 
@@ -17,6 +18,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 @app.on_event("startup")
