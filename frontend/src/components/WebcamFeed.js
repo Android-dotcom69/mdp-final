@@ -349,7 +349,7 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
         audio={false}
         mirrored={false}
         screenshotFormat="image/jpeg"
-        screenshotQuality={0.7}
+        screenshotQuality={0.95}
         videoConstraints={videoConstraints}
         className="w-full h-auto"
         onUserMedia={handleUserMedia}

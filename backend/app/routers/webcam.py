@@ -12,17 +12,53 @@ known_faces_cache = {
     "names": []
 }
 
+MATCH_THRESHOLD = 0.30  # Lower threshold for more lenient matching
+
+def scale_confidence(cosine_score):
+    """
+    Map raw cosine similarity to user-friendly confidence percentage.
+    SFace cosine range: 0.30 (weak match) to 1.0 (perfect match)
+    Maps to: 60% to 100% display range
+    """
+    if cosine_score <= MATCH_THRESHOLD:
+        return 0.0
+    # Map 0.30-1.0 -> 0.60-1.0 (display range)
+    scaled = 0.60 + (cosine_score - MATCH_THRESHOLD) / (1.0 - MATCH_THRESHOLD) * 0.40
+    return min(1.0, scaled)
+
 async def load_known_faces():
     try:
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Face))
             faces = result.scalars().all()
-            known_faces_cache["encodings"] = [np.array(f.embedding) for f in faces]
-            known_faces_cache["names"] = [f.name for f in faces]
-            print(f"Loaded {len(faces)} faces into cache.")
-            for i, (enc, name) in enumerate(zip(known_faces_cache["encodings"], known_faces_cache["names"])):
-                norm = float(np.linalg.norm(enc))
-                print(f"  Face '{name}': embedding dim={enc.shape}, L2 norm={norm:.4f}")
+
+            # Group embeddings by name for averaging
+            name_embeddings = {}
+            for f in faces:
+                enc = np.array(f.embedding)
+                # Normalize if not already normalized
+                norm = np.linalg.norm(enc)
+                if norm > 1.5:  # Raw embedding (not normalized)
+                    enc = enc / norm
+                if f.name not in name_embeddings:
+                    name_embeddings[f.name] = []
+                name_embeddings[f.name].append(enc)
+
+            # Average multiple embeddings per person for more robust matching
+            known_faces_cache["encodings"] = []
+            known_faces_cache["names"] = []
+            for name, encs in name_embeddings.items():
+                if len(encs) > 1:
+                    avg_enc = np.mean(encs, axis=0)
+                    avg_enc = avg_enc / (np.linalg.norm(avg_enc) + 1e-10)
+                    known_faces_cache["encodings"].append(avg_enc)
+                    print(f"  Face '{name}': averaged {len(encs)} embeddings")
+                else:
+                    known_faces_cache["encodings"].append(encs[0])
+                    print(f"  Face '{name}': single embedding")
+                known_faces_cache["names"].append(name)
+
+            print(f"Loaded {len(faces)} face records -> {len(known_faces_cache['names'])} unique persons.")
     except Exception as e:
         print(f"Failed to load known faces: {e}")
 
@@ -50,15 +86,19 @@ async def process_frame(file: UploadFile = File(...)):
 
         loc = face_data["location"]
         unk_norm = float(np.linalg.norm(unknown_encoding))
-        print(f"Detected face at location={loc}, embedding norm={unk_norm:.4f}, dim={unknown_encoding.shape}")
 
+        # Normalize if not already
+        if unk_norm > 1.5:
+            unk_normalized = unknown_encoding / (unk_norm + 1e-10)
+        else:
+            unk_normalized = unknown_encoding
+
+        print(f"Detected face at location={loc}, embedding norm={unk_norm:.4f}")
+
+        cosine_scores = []
         if known_encodings and len(known_encodings) > 0:
-            unk_normalized = unknown_encoding / (np.linalg.norm(unknown_encoding) + 1e-10)
-
-            cosine_scores = []
             for known_enc in known_encodings:
-                known_normalized = known_enc / (np.linalg.norm(known_enc) + 1e-10)
-                score = float(np.dot(unk_normalized, known_normalized))
+                score = float(np.dot(unk_normalized, known_enc))
                 cosine_scores.append(score)
 
             max_idx = int(np.argmax(cosine_scores))
@@ -66,11 +106,11 @@ async def process_frame(file: UploadFile = File(...)):
 
             scores_str = ", ".join([f"{known_names[i]}={s:.3f}" for i, s in enumerate(cosine_scores)])
             print(f"  Scores: [{scores_str}]")
-            print(f"  Best match: {known_names[max_idx]} cosine={max_score:.3f} (threshold=0.35)")
+            print(f"  Best match: {known_names[max_idx]} cosine={max_score:.3f} (threshold={MATCH_THRESHOLD})")
 
-            if max_score > 0.35:
+            if max_score > MATCH_THRESHOLD:
                 name = known_names[max_idx]
-                confidence = max_score
+                confidence = scale_confidence(max_score)
 
         response_data.append({
             "name": name,

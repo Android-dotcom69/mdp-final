@@ -25,7 +25,11 @@ class FaceLogic:
             "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
         )
         self.recognizer = cv2.FaceRecognizerSF.create(self.sface_model_path, "")
-        logger.info("FaceLogic initialized (YuNet + SFace)")
+
+        # CLAHE for adaptive histogram equalization (improves low-light detection)
+        self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+        logger.info("FaceLogic initialized (YuNet + SFace + CLAHE)")
 
     def _download_if_missing(self, path, url):
         if not os.path.exists(path):
@@ -39,6 +43,18 @@ class FaceLogic:
                 logger.error(f"Failed to download model: {e}")
                 raise
 
+    def _preprocess_image(self, img_bgr):
+        """Apply CLAHE to improve contrast in poor lighting conditions."""
+        # Convert to LAB color space
+        lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+        # Apply CLAHE to the L (lightness) channel only
+        l, a, b = cv2.split(lab)
+        l = self.clahe.apply(l)
+        lab = cv2.merge([l, a, b])
+        # Convert back to BGR
+        enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        return enhanced
+
     def detect_faces(self, image_bytes: bytes):
         nparr = np.frombuffer(image_bytes, np.uint8)
         img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -50,12 +66,16 @@ class FaceLogic:
         h, w, _ = img_bgr.shape
         logger.info(f"Processing image: {w}x{h}")
 
+        # Apply CLAHE preprocessing for better detection in poor lighting
+        img_enhanced = self._preprocess_image(img_bgr)
+
         detector = cv2.FaceDetectorYN.create(
             self.yunet_model_path, "", (w, h),
             score_threshold=0.5, nms_threshold=0.3, top_k=10
         )
 
-        _, faces = detector.detect(img_bgr)
+        # Detect on enhanced image for better accuracy
+        _, faces = detector.detect(img_enhanced)
 
         if faces is None or len(faces) == 0:
             logger.info("No faces detected by YuNet")
@@ -66,9 +86,16 @@ class FaceLogic:
         results = []
         for i, face in enumerate(faces):
             try:
-                aligned = self.recognizer.alignCrop(img_bgr, face)
+                # Use enhanced image for alignment and embedding extraction
+                aligned = self.recognizer.alignCrop(img_enhanced, face)
                 embedding = self.recognizer.feature(aligned)
-                embedding = embedding.flatten().tolist()
+                embedding_flat = embedding.flatten()
+
+                # L2-normalize the embedding before returning
+                norm = np.linalg.norm(embedding_flat)
+                if norm > 0:
+                    embedding_flat = embedding_flat / norm
+                embedding_list = embedding_flat.tolist()
 
                 x, y, bw, bh = int(face[0]), int(face[1]), int(face[2]), int(face[3])
                 score = float(face[14]) if len(face) > 14 else 0.0
@@ -82,7 +109,7 @@ class FaceLogic:
 
                 results.append({
                     "location": [top, right, bottom, left],
-                    "embedding": embedding
+                    "embedding": embedding_list
                 })
             except Exception as e:
                 logger.error(f"Error processing face {i}: {e}")
