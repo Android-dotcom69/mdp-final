@@ -147,23 +147,31 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      // Sync canvas size to source dimensions
-      let sourceWidth, sourceHeight;
+      // Get the display element to match canvas to actual displayed size
+      let displayEl, nativeWidth, nativeHeight;
       if (cameraSource === 'ip' && cameraUrl) {
-        const img = imgRef.current;
-        sourceWidth = img ? (img.naturalWidth || 640) : 640;
-        sourceHeight = img ? (img.naturalHeight || 480) : 480;
+        displayEl = imgRef.current;
+        nativeWidth = displayEl ? (displayEl.naturalWidth || 640) : 640;
+        nativeHeight = displayEl ? (displayEl.naturalHeight || 480) : 480;
       } else {
         const currentVideo = webcamRef.current?.video;
         if (!currentVideo) return;
-        sourceWidth = currentVideo.videoWidth;
-        sourceHeight = currentVideo.videoHeight;
+        displayEl = currentVideo;
+        nativeWidth = currentVideo.videoWidth;
+        nativeHeight = currentVideo.videoHeight;
       }
 
-      if (canvas.width !== sourceWidth || canvas.height !== sourceHeight) {
-        canvas.width = sourceWidth;
-        canvas.height = sourceHeight;
+      // Set canvas to the DISPLAY size (CSS pixels) for pixel-perfect overlay
+      const displayWidth = displayEl.clientWidth;
+      const displayHeight = displayEl.clientHeight;
+      if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+        canvas.width = displayWidth;
+        canvas.height = displayHeight;
       }
+
+      // Scale factor from native video resolution to display size
+      const scaleX = displayWidth / nativeWidth;
+      const scaleY = displayHeight / nativeHeight;
 
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -173,22 +181,26 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           const [top, right, bottom, left] = face.location;
           const isKnown = face.name !== 'Unknown';
 
-          // No coordinate mirroring needed — mirrored={true} on Webcam
-          // already mirrors the screenshot, so backend coords match the display
-          console.log(`[FaceDebug] name=${face.name} conf=${face.confidence.toFixed(3)} scores=${JSON.stringify(face.debug_scores)} norm=${face.debug_embedding_norm} loc=[${top},${right},${bottom},${left}] canvas=${canvas.width}x${canvas.height}`);
+          // Scale coordinates from native resolution to display size
+          const dLeft = left * scaleX;
+          const dTop = top * scaleY;
+          const dRight = right * scaleX;
+          const dBottom = bottom * scaleY;
+
+          console.log(`[FaceDebug] name=${face.name} loc=[${top},${right},${bottom},${left}] scaled=[${Math.round(dTop)},${Math.round(dRight)},${Math.round(dBottom)},${Math.round(dLeft)}] display=${displayWidth}x${displayHeight} native=${nativeWidth}x${nativeHeight}`);
 
           ctx.strokeStyle = isKnown ? '#22c55e' : '#ef4444';
           ctx.lineWidth = 3;
-          ctx.strokeRect(left, top, right - left, bottom - top);
+          ctx.strokeRect(dLeft, dTop, dRight - dLeft, dBottom - dTop);
 
           const label = `${face.name} (${Math.round(face.confidence * 100)}%)`;
           ctx.font = 'bold 14px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;
           ctx.fillStyle = isKnown ? '#22c55e' : '#ef4444';
-          ctx.fillRect(left, top - 24, textWidth + 12, 24);
+          ctx.fillRect(dLeft, dTop - 24, textWidth + 12, 24);
 
           ctx.fillStyle = '#ffffff';
-          ctx.fillText(label, left + 6, top - 7);
+          ctx.fillText(label, dLeft + 6, dTop - 7);
         });
 
         // Update debug overlay text
