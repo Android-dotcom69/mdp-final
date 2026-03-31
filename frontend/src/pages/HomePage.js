@@ -69,13 +69,13 @@ const HomePage = () => {
             </div>
 
             <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold mb-6 leading-tight tracking-tight text-white">
-              Fleet Face
+              VisionLog
               <br />
-              <span className="text-neutral-500">Recognition</span>
+              <span className="text-neutral-500">Face Recognition</span>
             </h1>
 
             <p className="max-w-xl mx-auto text-lg text-neutral-500 mb-12 leading-relaxed">
-              Intelligent facial recognition for fleet management and secure access control.
+              Intelligent facial recognition for workplace management and secure access control.
             </p>
 
             <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -126,7 +126,7 @@ const HomePage = () => {
             Core Capabilities
           </h2>
           <p className="text-neutral-600 max-w-2xl mx-auto">
-            A comprehensive platform for fleet security and personnel monitoring
+            A comprehensive platform for workplace security and personnel monitoring
           </p>
         </div>
 
@@ -170,7 +170,7 @@ const HomePage = () => {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 text-center">
         <h2 className="text-3xl font-bold mb-4 text-white">Ready to get started?</h2>
         <p className="text-neutral-600 mb-8 max-w-2xl mx-auto">
-          Begin monitoring your fleet with intelligent face recognition technology
+          Begin monitoring your workplace with intelligent face recognition technology
         </p>
         <Link
           to="/dashboard"

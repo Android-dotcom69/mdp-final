@@ -46,7 +46,7 @@ const Navbar = () => {
                   <Shield className="text-black" size={20} />
                 </div>
                 <div className="hidden sm:block">
-                  <span className="text-lg font-bold text-white tracking-tight">FleetFR</span>
+                  <span className="text-lg font-bold text-white tracking-tight">VisionLog</span>
                   <span className="text-[10px] text-neutral-600 block -mt-1 tracking-widest uppercase">Face Recognition</span>
                 </div>
               </Link>
