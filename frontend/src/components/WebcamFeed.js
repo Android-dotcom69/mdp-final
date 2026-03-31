@@ -335,7 +335,7 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
       <Webcam
         ref={webcamRef}
         audio={false}
-        mirrored={true}
+        mirrored={false}
         screenshotFormat="image/jpeg"
         screenshotQuality={0.7}
         videoConstraints={videoConstraints}
