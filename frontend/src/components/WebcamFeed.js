@@ -104,8 +104,8 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
       }
 
       const ctx = canvas.getContext('2d');
-      // Draw the video frame directly onto the canvas
-      ctx.drawImage(video, 0, 0, dw, dh);
+      // Clear canvas - video is visible underneath, canvas only draws bounding boxes
+      ctx.clearRect(0, 0, dw, dh);
 
       // Draw bounding boxes from last detection
       const scaleX = dw / vw;
@@ -330,7 +330,7 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
     );
   }
 
-  // Browser webcam mode - video is hidden, canvas shows video + bounding boxes
+  // Browser webcam mode - video visible, canvas overlays bounding boxes
   return (
     <div className="relative bg-black rounded-xl overflow-hidden">
       <Webcam
@@ -340,11 +340,11 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
         screenshotFormat="image/jpeg"
         screenshotQuality={0.85}
         videoConstraints={videoConstraints}
-        className="w-full h-auto invisible absolute top-0 left-0"
+        className="w-full h-auto"
         onUserMedia={handleUserMedia}
         onUserMediaError={(err) => { console.error('Webcam error:', err); setError('Failed to access webcam.'); }}
       />
-      <canvas ref={canvasRef} className="w-full h-auto" style={{ aspectRatio: '16/9' }} />
+      <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none" />
       <canvas ref={hiddenCanvasRef} style={{ display: 'none' }} />
 
       {isLoading && (
