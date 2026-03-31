@@ -1,20 +1,21 @@
-// src/components/Navbar.js - ENHANCED VERSION
+// src/components/Navbar.js
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { 
-  Home, 
-  LayoutDashboard, 
-  FileText, 
-  Settings, 
-  LogOut, 
-  Menu, 
-  X, 
-  Moon, 
+import {
+  Home,
+  LayoutDashboard,
+  FileText,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  Moon,
   Sun,
   User,
-  ChevronDown
+  ChevronDown,
+  Shield
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -46,27 +47,32 @@ const Navbar = () => {
   };
 
   if (!isAuthenticated) {
-    return null; // Don't show navbar on login page
+    return null;
   }
 
   return (
     <>
-      <nav className="bg-white dark:bg-gray-800 shadow-lg sticky top-0 z-50 transition-all duration-300">
+      <nav className="bg-white dark:bg-gray-900 shadow-sm sticky top-0 z-50 transition-all duration-300 border-b border-gray-100 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             {/* Logo and Brand */}
             <div className="flex items-center">
-              <Link 
-                to="/" 
-                className="flex items-center space-x-2 group"
+              <Link
+                to="/"
+                className="flex items-center space-x-3 group"
                 onClick={closeMobileMenu}
               >
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center transform group-hover:scale-110 transition-transform duration-300">
-                  <span className="text-white font-bold text-xl">FR</span>
+                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center transform group-hover:scale-110 transition-transform duration-300 shadow-md shadow-emerald-500/20">
+                  <Shield className="text-white" size={22} />
                 </div>
-                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent hidden sm:block">
-                  Face Recognition
-                </span>
+                <div className="hidden sm:block">
+                  <span className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">
+                    FleetFR
+                  </span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500 block -mt-1 tracking-wide">
+                    Face Recognition
+                  </span>
+                </div>
               </Link>
             </div>
 
@@ -81,8 +87,8 @@ const Navbar = () => {
                     to={link.to}
                     className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
                       active
-                        ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800'
-                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400'
+                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
                     }`}
                   >
                     <Icon size={18} className="mr-2" />
@@ -92,18 +98,17 @@ const Navbar = () => {
               })}
             </div>
 
-            {/* Right Side - Dark Mode, User Menu, Mobile Toggle */}
+            {/* Right Side */}
             <div className="flex items-center space-x-2">
-              {/* Dark Mode Toggle */}
               <button
                 onClick={toggleDarkMode}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-300 transform hover:scale-110"
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-300"
                 title={darkMode ? 'Light Mode' : 'Dark Mode'}
               >
                 {darkMode ? (
                   <Sun className="text-yellow-500" size={20} />
                 ) : (
-                  <Moon className="text-gray-600" size={20} />
+                  <Moon className="text-gray-500" size={20} />
                 )}
               </button>
 
@@ -111,29 +116,28 @@ const Navbar = () => {
               <div className="hidden md:block relative">
                 <button
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-300"
+                  className="flex items-center space-x-2 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-300"
                 >
-                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                  <div className="w-8 h-8 bg-slate-700 dark:bg-slate-600 rounded-full flex items-center justify-center">
                     <User className="text-white" size={16} />
                   </div>
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     {user?.username || 'User'}
                   </span>
-                  <ChevronDown 
-                    size={16} 
-                    className={`text-gray-500 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180' : ''}`} 
+                  <ChevronDown
+                    size={16}
+                    className={`text-gray-400 transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180' : ''}`}
                   />
                 </button>
 
-                {/* Dropdown Menu */}
                 {isUserMenuOpen && (
                   <>
-                    <div 
-                      className="fixed inset-0 z-10" 
+                    <div
+                      className="fixed inset-0 z-10"
                       onClick={() => setIsUserMenuOpen(false)}
                     ></div>
-                    <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-20 animate-fade-in">
-                      <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+                    <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-100 dark:border-gray-800 z-20 animate-fade-in">
+                      <div className="p-3 border-b border-gray-100 dark:border-gray-800">
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">
                           {user?.username}
                         </p>
@@ -147,14 +151,14 @@ const Navbar = () => {
                             navigate('/settings');
                             setIsUserMenuOpen(false);
                           }}
-                          className="w-full flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all"
+                          className="w-full flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-all"
                         >
                           <Settings size={16} className="mr-2" />
                           Settings
                         </button>
                         <button
                           onClick={handleLogout}
-                          className="w-full flex items-center px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"
+                          className="w-full flex items-center px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                         >
                           <LogOut size={16} className="mr-2" />
                           Logout
@@ -168,7 +172,7 @@ const Navbar = () => {
               {/* Mobile Menu Button */}
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-300"
+                className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-300"
               >
                 {isMobileMenuOpen ? (
                   <X className="text-gray-600 dark:text-gray-300" size={24} />
@@ -183,15 +187,14 @@ const Navbar = () => {
         {/* Mobile Menu */}
         <div
           className={`md:hidden transition-all duration-300 ease-in-out ${
-            isMobileMenuOpen 
-              ? 'max-h-screen opacity-100' 
+            isMobileMenuOpen
+              ? 'max-h-screen opacity-100'
               : 'max-h-0 opacity-0 overflow-hidden'
           }`}
         >
-          <div className="px-4 py-3 space-y-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
-            {/* User Info */}
-            <div className="flex items-center space-x-3 p-3 bg-white dark:bg-gray-800 rounded-lg mb-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+          <div className="px-4 py-3 space-y-2 bg-gray-50 dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800">
+            <div className="flex items-center space-x-3 p-3 bg-white dark:bg-gray-900 rounded-lg mb-3">
+              <div className="w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center">
                 <User className="text-white" size={20} />
               </div>
               <div>
@@ -204,7 +207,6 @@ const Navbar = () => {
               </div>
             </div>
 
-            {/* Nav Links */}
             {navLinks.map((link) => {
               const Icon = link.icon;
               const active = isActive(link.to);
@@ -215,8 +217,8 @@ const Navbar = () => {
                   onClick={closeMobileMenu}
                   className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${
                     active
-                      ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800'
-                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400'
+                      ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                   }`}
                 >
                   <Icon size={20} className="mr-3" />
@@ -225,10 +227,9 @@ const Navbar = () => {
               );
             })}
 
-            {/* Logout Button */}
             <button
               onClick={handleLogout}
-              className="w-full flex items-center px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"
+              className="w-full flex items-center px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
             >
               <LogOut size={20} className="mr-3" />
               Logout
@@ -237,7 +238,6 @@ const Navbar = () => {
         </div>
       </nav>
 
-      {/* Mobile Menu Backdrop */}
       {isMobileMenuOpen && (
         <div
           className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
