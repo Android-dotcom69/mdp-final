@@ -1,4 +1,4 @@
-// src/components/WebcamFeed.js - Backend API version with IP camera support
+// src/components/WebcamFeed.js - Direct canvas rendering for perfect bbox alignment
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import Webcam from 'react-webcam';
 import api, { dataURLtoBlob } from '../services/api';
@@ -24,8 +24,8 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
   const frameCountRef = useRef(0);
   const isProcessingRef = useRef(false);
   const isMountedRef = useRef(true);
+  const lastFacesRef = useRef([]);
 
-  // Load camera settings from localStorage
   useEffect(() => {
     const source = localStorage.getItem('cameraSource') || 'browser';
     const url = localStorage.getItem('cameraUrl') || '';
@@ -33,7 +33,6 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
     setCameraUrl(url);
   }, []);
 
-  // Check backend health on mount
   useEffect(() => {
     const checkBackend = async () => {
       setIsLoading(true);
@@ -47,51 +46,101 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
             const retry = await api.healthCheck();
             if (isMountedRef.current) {
               setBackendConnected(retry);
-              if (retry) {
-                setError(null);
-              }
+              if (retry) setError(null);
             }
           }, 5000);
         }
       }
     };
     checkBackend();
-
-    return () => {
-      isMountedRef.current = false;
-      cleanup();
-    };
+    return () => { isMountedRef.current = false; cleanup(); };
   }, []);
 
-  // For IP camera, mark video ready once stream loads
   useEffect(() => {
-    if (cameraSource === 'ip' && cameraUrl) {
-      setIsVideoReady(true);
-    }
+    if (cameraSource === 'ip' && cameraUrl) setIsVideoReady(true);
   }, [cameraSource, cameraUrl]);
 
-  // Start/stop detection loop based on readiness
   useEffect(() => {
     if (isActive && !isLoading && isVideoReady && backendConnected) {
       startDetection();
+      if (cameraSource !== 'ip') startVideoLoop();
     } else {
       stopDetection();
     }
     return () => stopDetection();
-  }, [isActive, isLoading, isVideoReady, backendConnected]);
+  }, [isActive, isLoading, isVideoReady, backendConnected, cameraSource]);
 
   const cleanup = () => {
     if (detectionIntervalRef.current) clearInterval(detectionIntervalRef.current);
     if (fpsIntervalRef.current) clearInterval(fpsIntervalRef.current);
   };
 
+  const startVideoLoop = () => {
+    // Continuously draw video + bounding boxes onto canvas for perfect alignment
+    const drawLoop = () => {
+      if (!isMountedRef.current) return;
+      if (cameraSource === 'ip') return;
+
+      const video = webcamRef.current?.video;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState < 2) {
+        requestAnimationFrame(drawLoop);
+        return;
+      }
+
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      if (vw === 0 || vh === 0) {
+        requestAnimationFrame(drawLoop);
+        return;
+      }
+
+      // Match canvas to display size
+      const dw = video.clientWidth;
+      const dh = video.clientHeight;
+      if (canvas.width !== dw || canvas.height !== dh) {
+        canvas.width = dw;
+        canvas.height = dh;
+      }
+
+      const ctx = canvas.getContext('2d');
+      // Draw the video frame directly onto the canvas
+      ctx.drawImage(video, 0, 0, dw, dh);
+
+      // Draw bounding boxes from last detection
+      const scaleX = dw / vw;
+      const scaleY = dh / vh;
+
+      lastFacesRef.current.forEach(face => {
+        const [top, right, bottom, left] = face.location;
+        const isKnown = face.name !== 'Unknown';
+
+        const dLeft = left * scaleX;
+        const dTop = top * scaleY;
+        const dRight = right * scaleX;
+        const dBottom = bottom * scaleY;
+
+        ctx.strokeStyle = isKnown ? '#22c55e' : '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(dLeft, dTop, dRight - dLeft, dBottom - dTop);
+
+        const label = face.name + ' (' + Math.round(face.confidence * 100) + '%)';
+        ctx.font = 'bold 14px Inter, sans-serif';
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = isKnown ? '#22c55e' : '#ef4444';
+        ctx.fillRect(dLeft, dTop - 24, tw + 12, 24);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, dLeft + 6, dTop - 7);
+      });
+
+      requestAnimationFrame(drawLoop);
+    };
+    requestAnimationFrame(drawLoop);
+  };
+
   const startDetection = () => {
     stopDetection();
-
-    detectionIntervalRef.current = setInterval(() => {
-      processFrame();
-    }, 500);
-
+    detectionIntervalRef.current = setInterval(() => { processFrame(); }, 500);
     fpsIntervalRef.current = setInterval(() => {
       setFps(frameCountRef.current);
       frameCountRef.current = 0;
@@ -99,14 +148,8 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
   };
 
   const stopDetection = () => {
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
-    }
-    if (fpsIntervalRef.current) {
-      clearInterval(fpsIntervalRef.current);
-      fpsIntervalRef.current = null;
-    }
+    if (detectionIntervalRef.current) { clearInterval(detectionIntervalRef.current); detectionIntervalRef.current = null; }
+    if (fpsIntervalRef.current) { clearInterval(fpsIntervalRef.current); fpsIntervalRef.current = null; }
   };
 
   const processFrame = useCallback(async () => {
@@ -115,17 +158,17 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
 
     try {
       let blob = null;
+      let nativeWidth, nativeHeight;
 
       if (cameraSource === 'ip' && cameraUrl) {
         const img = imgRef.current;
-        if (!img || !img.naturalWidth) {
-          isProcessingRef.current = false;
-          return;
-        }
+        if (!img || !img.naturalWidth) { isProcessingRef.current = false; return; }
         const hCanvas = hiddenCanvasRef.current;
         if (!hCanvas) { isProcessingRef.current = false; return; }
-        hCanvas.width = img.naturalWidth || 640;
-        hCanvas.height = img.naturalHeight || 480;
+        nativeWidth = img.naturalWidth;
+        nativeHeight = img.naturalHeight;
+        hCanvas.width = nativeWidth;
+        hCanvas.height = nativeHeight;
         const hCtx = hCanvas.getContext('2d');
         hCtx.drawImage(img, 0, 0);
         blob = await new Promise((resolve) => hCanvas.toBlob(resolve, 'image/jpeg', 0.8));
@@ -133,10 +176,16 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
         if (!webcamRef.current) { isProcessingRef.current = false; return; }
         const video = webcamRef.current.video;
         if (!video || video.readyState !== 4) { isProcessingRef.current = false; return; }
-        if (video.videoWidth === 0 || video.videoHeight === 0) { isProcessingRef.current = false; return; }
-        const screenshot = webcamRef.current.getScreenshot();
-        if (!screenshot) { isProcessingRef.current = false; return; }
-        blob = dataURLtoBlob(screenshot);
+        nativeWidth = video.videoWidth;
+        nativeHeight = video.videoHeight;
+        if (nativeWidth === 0 || nativeHeight === 0) { isProcessingRef.current = false; return; }
+        // Capture directly from video at native resolution
+        const hCanvas = hiddenCanvasRef.current || document.createElement('canvas');
+        hCanvas.width = nativeWidth;
+        hCanvas.height = nativeHeight;
+        const hCtx = hCanvas.getContext('2d');
+        hCtx.drawImage(video, 0, 0, nativeWidth, nativeHeight);
+        blob = await new Promise((resolve) => hCanvas.toBlob(resolve, 'image/jpeg', 0.85));
       }
 
       if (!blob) { isProcessingRef.current = false; return; }
@@ -144,69 +193,51 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
       const response = await api.processFrame(blob);
       if (!isMountedRef.current) return;
 
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      // Get the display element to match canvas to actual displayed size
-      let displayEl, nativeWidth, nativeHeight;
-      if (cameraSource === 'ip' && cameraUrl) {
-        displayEl = imgRef.current;
-        nativeWidth = displayEl ? (displayEl.naturalWidth || 640) : 640;
-        nativeHeight = displayEl ? (displayEl.naturalHeight || 480) : 480;
-      } else {
-        const currentVideo = webcamRef.current?.video;
-        if (!currentVideo) return;
-        displayEl = currentVideo;
-        nativeWidth = currentVideo.videoWidth;
-        nativeHeight = currentVideo.videoHeight;
-      }
-
-      // Set canvas to the DISPLAY size (CSS pixels) for pixel-perfect overlay
-      const displayWidth = displayEl.clientWidth;
-      const displayHeight = displayEl.clientHeight;
-      if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
-        canvas.width = displayWidth;
-        canvas.height = displayHeight;
-      }
-
-      // Scale factor from native video resolution to display size
-      const scaleX = displayWidth / nativeWidth;
-      const scaleY = displayHeight / nativeHeight;
-
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
       if (response.faces && response.faces.length > 0) {
-        response.faces.forEach(face => {
-          const [top, right, bottom, left] = face.location;
-          const isKnown = face.name !== 'Unknown';
+        lastFacesRef.current = response.faces;
 
-          // Scale coordinates from native resolution to display size
-          const dLeft = left * scaleX;
-          const dTop = top * scaleY;
-          const dRight = right * scaleX;
-          const dBottom = bottom * scaleY;
+        // For IP camera mode, draw on canvas overlay
+        if (cameraSource === 'ip' && cameraUrl) {
+          const canvas = canvasRef.current;
+          const img = imgRef.current;
+          if (canvas && img) {
+            const dw = img.clientWidth;
+            const dh = img.clientHeight;
+            if (canvas.width !== dw || canvas.height !== dh) {
+              canvas.width = dw;
+              canvas.height = dh;
+            }
+            const scaleX = dw / nativeWidth;
+            const scaleY = dh / nativeHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, dw, dh);
 
-          console.log(`[FaceDebug] name=${face.name} loc=[${top},${right},${bottom},${left}] scaled=[${Math.round(dTop)},${Math.round(dRight)},${Math.round(dBottom)},${Math.round(dLeft)}] display=${displayWidth}x${displayHeight} native=${nativeWidth}x${nativeHeight}`);
+            response.faces.forEach(face => {
+              const [top, right, bottom, left] = face.location;
+              const isKnown = face.name !== 'Unknown';
+              const dLeft = left * scaleX;
+              const dTop = top * scaleY;
+              const dRight = right * scaleX;
+              const dBottom = bottom * scaleY;
 
-          ctx.strokeStyle = isKnown ? '#22c55e' : '#ef4444';
-          ctx.lineWidth = 3;
-          ctx.strokeRect(dLeft, dTop, dRight - dLeft, dBottom - dTop);
+              ctx.strokeStyle = isKnown ? '#22c55e' : '#ef4444';
+              ctx.lineWidth = 3;
+              ctx.strokeRect(dLeft, dTop, dRight - dLeft, dBottom - dTop);
 
-          const label = `${face.name} (${Math.round(face.confidence * 100)}%)`;
-          ctx.font = 'bold 14px Inter, sans-serif';
-          const textWidth = ctx.measureText(label).width;
-          ctx.fillStyle = isKnown ? '#22c55e' : '#ef4444';
-          ctx.fillRect(dLeft, dTop - 24, textWidth + 12, 24);
+              const label = face.name + ' (' + Math.round(face.confidence * 100) + '%)';
+              ctx.font = 'bold 14px Inter, sans-serif';
+              const tw = ctx.measureText(label).width;
+              ctx.fillStyle = isKnown ? '#22c55e' : '#ef4444';
+              ctx.fillRect(dLeft, dTop - 24, tw + 12, 24);
+              ctx.fillStyle = '#ffffff';
+              ctx.fillText(label, dLeft + 6, dTop - 7);
+            });
+          }
+        }
 
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(label, dLeft + 6, dTop - 7);
-        });
-
-        // Update debug overlay text
         const f = response.faces[0];
-        const scoresStr = f.debug_scores ? Object.entries(f.debug_scores).map(([k,v]) => `${k}=${v}`).join(' ') : 'no known faces';
-        setDebugInfo(`scores: [${scoresStr}] norm=${f.debug_embedding_norm || '?'}`);
+        const scoresStr = f.debug_scores ? Object.entries(f.debug_scores).map(([k,v]) => k + '=' + v).join(' ') : 'no known faces';
+        setDebugInfo('scores: [' + scoresStr + '] norm=' + (f.debug_embedding_norm || '?'));
 
         const mappedFaces = response.faces.map(face => ({
           name: face.name,
@@ -215,13 +246,19 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
           isUnknown: face.name === 'Unknown',
         }));
 
-        if (onFaceDetected && mappedFaces.length > 0) {
-          onFaceDetected(mappedFaces);
-        }
-
+        if (onFaceDetected && mappedFaces.length > 0) onFaceDetected(mappedFaces);
         frameCountRef.current++;
       } else {
+        lastFacesRef.current = [];
         setDebugInfo('No faces detected');
+        // Clear IP camera overlay
+        if (cameraSource === 'ip') {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
+        }
       }
     } catch (err) {
       if (err.message && !err.message.includes('Failed to fetch')) {
@@ -232,42 +269,26 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
     }
   }, [onFaceDetected, cameraSource, cameraUrl]);
 
-  const handleUserMedia = () => {
-    setTimeout(() => setIsVideoReady(true), 500);
-  };
+  const handleUserMedia = () => { setTimeout(() => setIsVideoReady(true), 500); };
 
   const retryConnection = async () => {
-    setError(null);
-    setIpStreamError(false);
-    setIsLoading(true);
+    setError(null); setIpStreamError(false); setIsLoading(true);
     const healthy = await api.healthCheck();
-    setBackendConnected(healthy);
-    setIsLoading(false);
-    if (!healthy) {
-      setError('Still cannot reach the server. Please check that the backend is running.');
-    }
+    setBackendConnected(healthy); setIsLoading(false);
+    if (!healthy) setError('Still cannot reach the server.');
   };
 
-  const videoConstraints = {
-    width: 1280,
-    height: 720,
-    facingMode: 'user',
-  };
+  const videoConstraints = { width: 1280, height: 720, facingMode: 'user' };
 
   if (error) {
     return (
-      <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded">
+      <div className="bg-red-900/20 border-l-4 border-red-500 text-red-400 p-4 rounded">
         <div className="flex items-center">
           <AlertCircle className="mr-2 flex-shrink-0" />
           <div>
             <p className="font-bold">Connection Error</p>
             <p className="text-sm">{error}</p>
-            <button
-              onClick={retryConnection}
-              className="mt-2 text-sm underline hover:no-underline"
-            >
-              Retry Connection
-            </button>
+            <button onClick={retryConnection} className="mt-2 text-sm underline hover:no-underline">Retry Connection</button>
           </div>
         </div>
       </div>
@@ -277,127 +298,75 @@ const WebcamFeed = ({ onFaceDetected, isActive = true }) => {
   // IP Camera mode
   if (cameraSource === 'ip' && cameraUrl) {
     return (
-      <div className="relative bg-black rounded-lg overflow-hidden shadow-lg">
-        <img
-          ref={imgRef}
-          src={cameraUrl}
-          crossOrigin="anonymous"
-          alt="IP Camera Stream"
-          className="w-full h-auto"
-          onError={() => setIpStreamError(true)}
-          onLoad={() => setIpStreamError(false)}
-        />
-        <canvas
-          ref={canvasRef}
-          className="absolute top-0 left-0 w-full h-full pointer-events-none"
-        />
+      <div className="relative bg-black rounded-xl overflow-hidden">
+        <img ref={imgRef} src={cameraUrl} crossOrigin="anonymous" alt="IP Camera" className="w-full h-auto"
+          onError={() => setIpStreamError(true)} onLoad={() => setIpStreamError(false)} />
+        <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none" />
         <canvas ref={hiddenCanvasRef} style={{ display: 'none' }} />
-
         {ipStreamError && (
-          <div className="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center">
+          <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center">
             <AlertCircle className="text-red-500 mb-3" size={48} />
             <p className="text-white text-lg mb-2">Cannot load camera stream</p>
-            <p className="text-gray-400 text-sm mb-4">Check that the Raspberry Pi / IP camera is running and accessible</p>
-            <button
-              onClick={() => { setIpStreamError(false); }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Retry
-            </button>
+            <button onClick={() => setIpStreamError(false)} className="px-4 py-2 bg-neutral-800 text-white rounded-lg hover:bg-neutral-700">Retry</button>
           </div>
         )}
-
         {isLoading && (
-          <div className="absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-white text-lg">Connecting to face recognition server...</p>
-            <p className="text-gray-400 text-sm mt-2">This may take up to 30 seconds on first load</p>
+          <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white mb-4"></div>
+            <p className="text-white">Connecting...</p>
           </div>
         )}
-
-        <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded-lg flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${
-            isActive && !isLoading && backendConnected && !ipStreamError
-              ? 'bg-green-500 animate-pulse'
-              : 'bg-gray-500'
-          }`}></div>
-          <span className="text-sm font-medium">
-            {isLoading ? 'Connecting...' : !backendConnected ? 'Server Offline' : ipStreamError ? 'Stream Error' : isActive ? 'Live (IP Camera)' : 'Paused'}
-          </span>
+        <div className="absolute top-4 left-4 bg-black/80 text-white px-3 py-2 rounded-lg flex items-center space-x-2 text-sm">
+          <div className={`w-2 h-2 rounded-full ${isActive && !isLoading && backendConnected && !ipStreamError ? 'bg-green-500 animate-pulse' : 'bg-neutral-600'}`}></div>
+          <span>{isLoading ? 'Connecting...' : !backendConnected ? 'Offline' : ipStreamError ? 'Error' : isActive ? 'Live (IP)' : 'Paused'}</span>
         </div>
-
         {!isLoading && backendConnected && !ipStreamError && (
-          <div className="absolute top-4 right-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded-lg">
-            <span className="text-sm font-medium">{fps} FPS</span>
-          </div>
+          <div className="absolute top-4 right-4 bg-black/80 text-white px-3 py-2 rounded-lg text-sm">{fps} FPS</div>
         )}
-
         {debugInfo && (
-          <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 text-yellow-300 px-3 py-1 rounded text-xs font-mono">
-            {debugInfo}
-          </div>
+          <div className="absolute bottom-4 left-4 bg-black/80 text-yellow-300 px-3 py-1 rounded text-xs font-mono">{debugInfo}</div>
         )}
       </div>
     );
   }
 
-  // Browser webcam mode (default)
+  // Browser webcam mode - video is hidden, canvas shows video + bounding boxes
   return (
-    <div className="relative bg-black rounded-lg overflow-hidden shadow-lg">
+    <div className="relative bg-black rounded-xl overflow-hidden">
       <Webcam
         ref={webcamRef}
         audio={false}
         mirrored={false}
         screenshotFormat="image/jpeg"
-        screenshotQuality={0.95}
+        screenshotQuality={0.85}
         videoConstraints={videoConstraints}
-        className="w-full h-auto"
+        className="w-full h-auto invisible absolute top-0 left-0"
         onUserMedia={handleUserMedia}
-        onUserMediaError={(err) => {
-          console.error('Webcam error:', err);
-          setError('Failed to access webcam. Please check permissions.');
-        }}
+        onUserMediaError={(err) => { console.error('Webcam error:', err); setError('Failed to access webcam.'); }}
       />
-      <canvas
-        ref={canvasRef}
-        className="absolute top-0 left-0 w-full h-full pointer-events-none"
-      />
+      <canvas ref={canvasRef} className="w-full h-auto" style={{ aspectRatio: '16/9' }} />
+      <canvas ref={hiddenCanvasRef} style={{ display: 'none' }} />
 
       {isLoading && (
-        <div className="absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-          <p className="text-white text-lg">Connecting to face recognition server...</p>
-          <p className="text-gray-400 text-sm mt-2">This may take up to 30 seconds on first load</p>
+        <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white mb-4"></div>
+          <p className="text-white">Connecting to server...</p>
         </div>
       )}
-
       {!isVideoReady && !isLoading && (
-        <div className="absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center">
-          <p className="text-white text-lg">Initializing camera...</p>
+        <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center">
+          <p className="text-white">Initializing camera...</p>
         </div>
       )}
-
-      <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded-lg flex items-center space-x-2">
-        <div className={`w-2 h-2 rounded-full ${
-          isActive && !isLoading && isVideoReady && backendConnected
-            ? 'bg-green-500 animate-pulse'
-            : 'bg-gray-500'
-        }`}></div>
-        <span className="text-sm font-medium">
-          {isLoading ? 'Connecting...' : !backendConnected ? 'Server Offline' : !isVideoReady ? 'Starting...' : isActive ? 'Live' : 'Paused'}
-        </span>
+      <div className="absolute top-4 left-4 bg-black/80 text-white px-3 py-2 rounded-lg flex items-center space-x-2 text-sm">
+        <div className={`w-2 h-2 rounded-full ${isActive && !isLoading && isVideoReady && backendConnected ? 'bg-green-500 animate-pulse' : 'bg-neutral-600'}`}></div>
+        <span>{isLoading ? 'Connecting...' : !backendConnected ? 'Offline' : !isVideoReady ? 'Starting...' : isActive ? 'Live' : 'Paused'}</span>
       </div>
-
       {!isLoading && isVideoReady && backendConnected && (
-        <div className="absolute top-4 right-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded-lg">
-          <span className="text-sm font-medium">{fps} FPS</span>
-        </div>
+        <div className="absolute top-4 right-4 bg-black/80 text-white px-3 py-2 rounded-lg text-sm">{fps} FPS</div>
       )}
-
       {debugInfo && (
-        <div className="absolute bottom-4 left-4 bg-black bg-opacity-70 text-yellow-300 px-3 py-1 rounded text-xs font-mono">
-          {debugInfo}
-        </div>
+        <div className="absolute bottom-4 left-4 bg-black/80 text-yellow-300 px-3 py-1 rounded text-xs font-mono">{debugInfo}</div>
       )}
     </div>
   );
